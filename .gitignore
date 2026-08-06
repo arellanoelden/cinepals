@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+.pnpm-debug.log*
+
+# Build outputs & Turbo cache
+dist/
+build/
+.turbo/
+cdk.out/
+
+# Expo & React Native
+.expo/
+web-build/
+
+# Local configs
+.env
+.env.local
+.DS_Store
