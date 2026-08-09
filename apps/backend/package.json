@@ -15,10 +15,15 @@
     "jest": "^30",
     "aws-cdk": "2.1135.0",
     "tsx": "^4.23.0",
-    "typescript": "~7.0.2"
+    "typescript": "~7.0.2",
+    "@aws-appsync/utils": "^2.1.1",
+    "esbuild": "^0.28.1",
+    "glob": "^13.0.6"
   },
   "dependencies": {
     "aws-cdk-lib": "^2.263.0",
-    "constructs": "^10.5.0"
+    "constructs": "^10.5.0",
+    "@aws-amplify/auth-construct": "^1.11.2",
+    "@cinepals/types": "workspace:*"
   }
 }
