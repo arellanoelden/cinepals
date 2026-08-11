@@ -32,6 +32,7 @@ function RootNavigator() {
 
       <Stack.Protected guard={status === 'ready'}>
         <Stack.Screen name="profile" />
+        <Stack.Screen name="user/[userId]" />
         <Stack.Screen name="(tabs)" />
       </Stack.Protected>
     </Stack>

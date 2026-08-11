@@ -4,6 +4,7 @@ import { Construct } from 'constructs';
 
 export class TablesStack extends cdk.Stack {
   public readonly profilesTable: dynamodb.Table;
+  public readonly friendshipsTable: dynamodb.Table;
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -16,8 +17,17 @@ export class TablesStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
+    // Search GSI: constant partition key fans all profiles into one logical
+    // partition, sorted by lowercased name, so name search is an indexed
+    // begins_with() Query instead of a full table Scan.
+    this.profilesTable.addGlobalSecondaryIndex({
+      indexName: 'searchName-index',
+      partitionKey: { name: 'searchKey', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'displayNameLower', type: dynamodb.AttributeType.STRING },
+    });
+
     // Friendships table: dual-row pattern, one row per direction of the relationship
-    new dynamodb.Table(this, 'FriendshipsTable', {
+    this.friendshipsTable = new dynamodb.Table(this, 'FriendshipsTable', {
       tableName: 'Friendships',
       partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'friendId', type: dynamodb.AttributeType.STRING },

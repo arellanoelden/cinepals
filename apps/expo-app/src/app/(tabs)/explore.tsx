@@ -1,180 +1,267 @@
-import { Image } from 'expo-image';
-import { SymbolView } from 'expo-symbols';
-import { Platform, Pressable, ScrollView, StyleSheet } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { router } from 'expo-router';
+import { ActivityIndicator, Button, Text, TextInput } from 'react-native-paper';
+import type { FriendEdge, Profile } from '@cinepals/types';
 
-import { ExternalLink } from '@/components/external-link';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Collapsible } from '@/components/ui/collapsible';
-import { WebBadge } from '@/components/web-badge';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import {
+  acceptFriendRequest,
+  listFriendEdges,
+  removeFriend,
+  searchProfiles,
+  sendFriendRequest,
+} from '@/lib/graphql-client';
 
-export default function TabTwoScreen() {
-  const safeAreaInsets = useSafeAreaInsets();
-  const insets = {
-    ...safeAreaInsets,
-    bottom: safeAreaInsets.bottom + BottomTabInset + Spacing.three,
-  };
+const SEARCH_DEBOUNCE_MS = 300;
+
+function goToProfile(userId: string) {
+  router.push({ pathname: '/user/[userId]', params: { userId } });
+}
+
+function ProfileRow({
+  profile,
+  onPress,
+  right,
+}: {
+  profile: Profile;
+  onPress: () => void;
+  right?: React.ReactNode;
+}) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.row, { backgroundColor: theme.backgroundElement }]}>
+      <Text style={styles.rowName}>{profile.displayName}</Text>
+      {right}
+    </Pressable>
+  );
+}
+
+export default function FriendsScreen() {
+  const [query, setQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Profile[]>([]);
+  const [searching, setSearching] = useState(false);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [edges, setEdges] = useState<FriendEdge[]>([]);
+  const [edgesLoading, setEdgesLoading] = useState(true);
+  const [pendingUserId, setPendingUserId] = useState<string | null>(null);
+
+  const refreshEdges = useCallback(async () => {
+    setEdgesLoading(true);
+    try {
+      setEdges(await listFriendEdges());
+    } finally {
+      setEdgesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshEdges();
+  }, [refreshEdges]);
+
+  useEffect(() => {
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setSearchResults([]);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    debounceTimer.current = setTimeout(async () => {
+      try {
+        setSearchResults(await searchProfiles(trimmed));
+      } finally {
+        setSearching(false);
+      }
+    }, SEARCH_DEBOUNCE_MS);
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+    };
+  }, [query]);
+
+  async function handleAccept(userId: string) {
+    setPendingUserId(userId);
+    try {
+      await acceptFriendRequest(userId);
+      await refreshEdges();
+    } finally {
+      setPendingUserId(null);
+    }
+  }
+
+  async function handleRemove(userId: string) {
+    setPendingUserId(userId);
+    try {
+      await removeFriend(userId);
+      await refreshEdges();
+    } finally {
+      setPendingUserId(null);
+    }
+  }
+
+  async function handleAdd(userId: string) {
+    setPendingUserId(userId);
+    try {
+      await sendFriendRequest(userId);
+      setSearchResults((current) =>
+        current.map((p) => (p.userId === userId ? { ...p, friendStatus: 'OUTGOING_REQUEST' } : p)),
+      );
+    } finally {
+      setPendingUserId(null);
+    }
+  }
+
+  const incomingRequests = edges.filter((e) => e.status === 'INCOMING_REQUEST');
+  const friends = edges.filter((e) => e.status === 'ACCEPTED');
   const theme = useTheme();
 
-  const contentPlatformStyle = Platform.select({
-    android: {
-      paddingTop: insets.top,
-      paddingLeft: insets.left,
-      paddingRight: insets.right,
-      paddingBottom: insets.bottom,
-    },
-    web: {
-      paddingTop: Spacing.six,
-      paddingBottom: Spacing.four,
-    },
-  });
-
   return (
-    <ScrollView
-      style={[styles.scrollView, { backgroundColor: theme.background }]}
-      contentInset={insets}
-      contentContainerStyle={[styles.contentContainer, contentPlatformStyle]}>
-      <ThemedView style={styles.container}>
-        <ThemedView style={styles.titleContainer}>
-          <ThemedText type="subtitle">Explore</ThemedText>
-          <ThemedText style={styles.centerText} themeColor="textSecondary">
-            This starter app includes example{'\n'}code to help you get started.
-          </ThemedText>
+    <ScrollView contentContainerStyle={styles.scrollContent}>
+      <View style={styles.container}>
+        <Text variant="headlineMedium" style={styles.title}>
+          Friends
+        </Text>
 
-          <ExternalLink href="https://docs.expo.dev" asChild>
-            <Pressable style={({ pressed }) => pressed && styles.pressed}>
-              <ThemedView type="backgroundElement" style={styles.linkButton}>
-                <ThemedText type="link">Expo documentation</ThemedText>
-                <SymbolView
-                  tintColor={theme.text}
-                  name={{ ios: 'arrow.up.right.square', android: 'link', web: 'link' }}
-                  size={12}
-                />
-              </ThemedView>
-            </Pressable>
-          </ExternalLink>
-        </ThemedView>
+        <TextInput
+          label="Search by name"
+          value={query}
+          onChangeText={setQuery}
+          style={styles.searchInput}
+        />
 
-        <ThemedView style={styles.sectionsWrapper}>
-          <Collapsible title="File-based routing">
-            <ThemedText type="small">
-              This app has two screens: <ThemedText type="code">src/app/index.tsx</ThemedText> and{' '}
-              <ThemedText type="code">src/app/explore.tsx</ThemedText>
-            </ThemedText>
-            <ThemedText type="small">
-              The layout file in <ThemedText type="code">src/app/_layout.tsx</ThemedText> sets up
-              the tab navigator.
-            </ThemedText>
-            <ExternalLink href="https://docs.expo.dev/router/introduction">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
+        {searching ? <ActivityIndicator style={styles.smallLoading} /> : null}
 
-          <Collapsible title="Android, iOS, and web support">
-            <ThemedView type="backgroundElement" style={styles.collapsibleContent}>
-              <ThemedText type="small">
-                You can open this project on Android, iOS, and the web. To open the web version,
-                press <ThemedText type="smallBold">w</ThemedText> in the terminal running this
-                project.
-              </ThemedText>
-              <Image
-                source={require('@/assets/images/tutorial-web.png')}
-                style={styles.imageTutorial}
+        {searchResults.length > 0 && (
+          <View style={styles.section}>
+            <Text variant="titleMedium" style={styles.sectionTitle}>
+              Results
+            </Text>
+            {searchResults.map((profile) => (
+              <ProfileRow
+                key={profile.userId}
+                profile={profile}
+                onPress={() => goToProfile(profile.userId)}
+                right={
+                  profile.friendStatus === 'NONE' ? (
+                    <Button
+                      mode="contained-tonal"
+                      compact
+                      loading={pendingUserId === profile.userId}
+                      disabled={pendingUserId === profile.userId}
+                      onPress={() => handleAdd(profile.userId)}>
+                      Add
+                    </Button>
+                  ) : (
+                    <Text style={styles.statusLabel}>{profile.friendStatus.replace('_', ' ')}</Text>
+                  )
+                }
               />
-            </ThemedView>
-          </Collapsible>
+            ))}
+          </View>
+        )}
 
-          <Collapsible title="Images">
-            <ThemedText type="small">
-              For static images, you can use the <ThemedText type="code">@2x</ThemedText> and{' '}
-              <ThemedText type="code">@3x</ThemedText> suffixes to provide files for different
-              screen densities.
-            </ThemedText>
-            <Image source={require('@/assets/images/react-logo.png')} style={styles.imageReact} />
-            <ExternalLink href="https://reactnative.dev/docs/images">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
+        {edgesLoading ? (
+          <ActivityIndicator style={styles.smallLoading} />
+        ) : (
+          <>
+            {incomingRequests.length > 0 && (
+              <View style={styles.section}>
+                <Text variant="titleMedium" style={styles.sectionTitle}>
+                  Requests
+                </Text>
+                {incomingRequests.map((edge) =>
+                  edge.profile ? (
+                    <ProfileRow
+                      key={edge.userId}
+                      profile={edge.profile}
+                      onPress={() => goToProfile(edge.userId)}
+                      right={
+                        <View style={styles.actionRow}>
+                          <Button
+                            mode="contained-tonal"
+                            compact
+                            loading={pendingUserId === edge.userId}
+                            disabled={pendingUserId === edge.userId}
+                            onPress={() => handleAccept(edge.userId)}>
+                            Accept
+                          </Button>
+                          <Button
+                            mode="text"
+                            compact
+                            disabled={pendingUserId === edge.userId}
+                            onPress={() => handleRemove(edge.userId)}>
+                            Decline
+                          </Button>
+                        </View>
+                      }
+                    />
+                  ) : null,
+                )}
+              </View>
+            )}
 
-          <Collapsible title="Light and dark mode components">
-            <ThemedText type="small">
-              This template has light and dark mode support. The{' '}
-              <ThemedText type="code">useColorScheme()</ThemedText> hook lets you inspect what the
-              user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-            </ThemedText>
-            <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
-
-          <Collapsible title="Animations">
-            <ThemedText type="small">
-              This template includes an example of an animated component. The{' '}
-              <ThemedText type="code">src/components/ui/collapsible.tsx</ThemedText> component uses
-              the powerful <ThemedText type="code">react-native-reanimated</ThemedText> library to
-              animate opening this hint.
-            </ThemedText>
-          </Collapsible>
-        </ThemedView>
-        {Platform.OS === 'web' && <WebBadge />}
-      </ThemedView>
+            <View style={styles.section}>
+              <Text variant="titleMedium" style={styles.sectionTitle}>
+                Your Friends
+              </Text>
+              {friends.length === 0 ? (
+                <Text style={{ color: theme.textSecondary }}>No friends yet - search above to add some.</Text>
+              ) : (
+                friends.map((edge) =>
+                  edge.profile ? (
+                    <ProfileRow
+                      key={edge.userId}
+                      profile={edge.profile}
+                      onPress={() => goToProfile(edge.userId)}
+                    />
+                  ) : null,
+                )
+              )}
+            </View>
+          </>
+        )}
+      </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollView: {
-    flex: 1,
-  },
-  contentContainer: {
+  scrollContent: {
     flexDirection: 'row',
     justifyContent: 'center',
   },
   container: {
-    maxWidth: MaxContentWidth,
-    flexGrow: 1,
-  },
-  titleContainer: {
-    gap: Spacing.three,
-    alignItems: 'center',
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.six,
-  },
-  centerText: {
-    textAlign: 'center',
-  },
-  pressed: {
-    opacity: 0.7,
-  },
-  linkButton: {
-    flexDirection: 'row',
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.five,
-    justifyContent: 'center',
-    gap: Spacing.one,
-    alignItems: 'center',
-  },
-  sectionsWrapper: {
-    gap: Spacing.five,
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.three,
-  },
-  collapsibleContent: {
-    alignItems: 'center',
-  },
-  imageTutorial: {
+    flex: 1,
     width: '100%',
-    aspectRatio: 296 / 171,
+    maxWidth: MaxContentWidth,
+    paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.six,
+    paddingBottom: BottomTabInset + Spacing.four,
+    gap: Spacing.two,
+  },
+  title: { marginBottom: Spacing.three },
+  searchInput: {},
+  smallLoading: { marginVertical: Spacing.two },
+  section: { marginTop: Spacing.four, gap: Spacing.two },
+  sectionTitle: { marginBottom: Spacing.one },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
     borderRadius: Spacing.three,
-    marginTop: Spacing.two,
   },
-  imageReact: {
-    width: 100,
-    height: 100,
-    alignSelf: 'center',
-  },
+  rowName: { fontSize: 16, fontWeight: '500' },
+  statusLabel: { fontSize: 12, textTransform: 'capitalize' },
+  actionRow: { flexDirection: 'row', gap: Spacing.one },
 });

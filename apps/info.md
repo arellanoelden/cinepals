@@ -1,6 +1,20 @@
 # Description
 This stack is for a movie review app called cinepals. The app revolves around doing movie reviews but tied closer to your friends. Think how letterboxd is a movie review app where you can see everyone where as this is focused on your own friend group. There is a feed of your friends most recent reviews, you can see movie details on a movie detail page that will also show reviews from your friends on this movie. Reviews can have images/gifs attached and are ranked 0 to 5. There is a standard login/sign up page where user can make an account or create one with sign in with google. For the UI we want to use react native paper and support material you. This app will be for web, android and IOS but for now lets focus on web and android. The info below is focused on the overall architecture of the app
 
+Ok now the general steps I want this implemented in are
+
+[x] sign up/login flow
+[x] friends profile view and adding friends
+[] TMDB integration for movie page and search
+[] Create/view my posts
+[] View posts from friends, create the feed essentially
+[] View posts on a given profile
+[] Comments on a post and support for images/gifs
+[] Notification system for new posts, comment mentions etc
+[] Watch on X platform integration from TMDB
+[] My watchlist creation
+[] Friends watchlist to you
+
 # Movie Review Social App — Architecture Summary
 ## Tech Stack
 - **Frontend:** Web app (React/Next.js)
@@ -26,25 +40,34 @@ This stack is for a movie review app called cinepals. The app revolves around do
 - Available server-side from JWT claims (`event.requestContext.authorizer.claims.sub`)
 ---
 ## DynamoDB Tables
-### Profiles Table
+### Profiles Table — IMPLEMENTED
 | PK | Attributes |
 |----|-----------|
-| userId (sub) | displayName, avatar, bio, email, createdAt |
+| userId (sub) | displayName, avatar, bio, email, createdAt, searchKey, displayNameLower |
+**GSI: searchName-index** (added for friend discovery)
+- PK: searchKey (constant `"PROFILE"` on every row), SK: displayNameLower
+- Lets name search be an indexed `Query` + `begins_with()` instead of a table `Scan`. All profiles share one logical GSI partition — fine at current scale; shard by first letter later if search read volume ever becomes a bottleneck.
 **Access patterns:**
-- Get profile: GetItem by userId
-- Create on first sign-in: Post-confirmation Lambda trigger
+- Get own profile: GetItem by userId (`getProfile`, uses Cognito identity)
+- Get another user's profile: GetItem by userId (`getProfileById`)
+- Search by name: Query on searchName-index + begins_with (`searchProfiles`, limit 20)
+- Create on first sign-in: `createProfile` mutation (not yet wired to a post-confirmation trigger — currently a client-driven step, see `create-profile.tsx`)
+- `email` is stripped from the response on every path except the caller's own profile, to avoid leaking other users' emails
+- `Profile.friendStatus` is a nested field resolver (not a stored attribute) — resolves the caller's relationship to that profile's owner by looking up their own Friendships row
 ---
-### Friendships Table (dual-row pattern)
+### Friendships Table (dual-row pattern) — IMPLEMENTED
 | PK (userId) | SK (friendId) | status | createdAt |
 |-------------|---------------|--------|-----------|
-| alice | bob | accepted | ... |
-| bob | alice | accepted | ... |
+| alice | bob | OUTGOING_REQUEST | ... |
+| bob | alice | INCOMING_REQUEST | ... |
+(after acceptance both rows flip to `ACCEPTED`)
 **Access patterns:**
-- Get all friends: Query PK=userId, FilterExpression status=accepted
-- Send request: TransactWriteItems (two PutItems: outgoing_request + incoming_request)
-- Accept request: TransactWriteItems (two UpdateItems → accepted)
-- Get pending requests: Query PK=userId, FilterExpression status=incoming_request
-**Why dual rows:** Single query returns all friends for a user. No GSI needed.
+- List all relationships (pending + accepted, both directions): single Query PK=userId, no filter (`listFriendEdges`) — small N per user, frontend buckets client-side
+- Send request: TransactWriteItems (two PutItems: OUTGOING_REQUEST + INCOMING_REQUEST), condition `attribute_not_exists` on both to reject duplicate/overlapping requests (`sendFriendRequest`)
+- Accept request: TransactWriteItems (two UpdateItems → ACCEPTED), condition-checks both rows' prior status (`acceptFriendRequest`)
+- Remove: TransactWriteItems (two DeleteItems) — one mutation (`removeFriend`) deliberately covers three actions: decline an incoming request, cancel an outgoing one, and unfriend an accepted friend, since "delete both rows" is correct in all three cases
+- `addDynamoDbDataSource` does not grant `dynamodb:TransactWriteItems` by default — needed an explicit IAM grant in `api-stack.ts`
+**Why dual rows:** Single query returns all of a user's relationships. No GSI needed.
 ---
 ### Reviews Table
 | PK (movieId) | SK (createdAt#userId) | userId | rating | content | media | createdAt |

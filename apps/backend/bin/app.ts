@@ -15,4 +15,5 @@ new ApiStack(app, 'ApiStack', {
   env,
   userPool: authStack.auth.resources.userPool,
   profilesTable: tablesStack.profilesTable,
+  friendshipsTable: tablesStack.friendshipsTable,
 });

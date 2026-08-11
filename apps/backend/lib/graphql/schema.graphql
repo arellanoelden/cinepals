@@ -1,3 +1,16 @@
+enum FriendStatus {
+  INCOMING_REQUEST
+  OUTGOING_REQUEST
+  ACCEPTED
+}
+
+enum FriendRelationship {
+  NONE
+  INCOMING_REQUEST
+  OUTGOING_REQUEST
+  ACCEPTED
+}
+
 type Profile {
   userId: ID!
   displayName: String!
@@ -5,12 +18,26 @@ type Profile {
   avatar: String
   email: String
   createdAt: String
+  friendStatus: FriendRelationship!
+}
+
+type FriendEdge {
+  userId: ID!
+  status: FriendStatus!
+  createdAt: String!
+  profile: Profile
 }
 
 type Query {
   getProfile: Profile
+  getProfileById(userId: ID!): Profile
+  searchProfiles(query: String!): [Profile!]!
+  listFriendEdges: [FriendEdge!]!
 }
 
 type Mutation {
   createProfile(displayName: String!, bio: String, avatar: String): Profile
+  sendFriendRequest(userId: ID!): FriendEdge
+  acceptFriendRequest(userId: ID!): FriendEdge
+  removeFriend(userId: ID!): Boolean
 }

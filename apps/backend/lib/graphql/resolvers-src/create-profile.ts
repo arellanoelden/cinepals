@@ -25,6 +25,10 @@ export function request(ctx: Context<CreateProfileArgs>) {
       avatar: avatar ?? null,
       email: claims.email ?? null,
       createdAt: util.time.nowISO8601(),
+      // Constant partition key for the searchName-index GSI: every profile
+      // shares it so name search is one indexed Query, not a table Scan.
+      searchKey: 'PROFILE',
+      displayNameLower: displayName.toLowerCase(),
     }),
     condition: {
       expression: 'attribute_not_exists(userId)',
@@ -40,5 +44,5 @@ export function response(ctx: Context<CreateProfileArgs>): Profile {
     util.error(ctx.error.message, ctx.error.type);
   }
   const { sub } = ctx.identity as unknown as CognitoIdentity;
-  return { userId: sub, ...ctx.result } as Profile;
+  return { userId: sub, friendStatus: 'NONE', ...ctx.result } as Profile;
 }
