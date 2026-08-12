@@ -2,7 +2,15 @@ import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ActivityIndicator, Button, HelperText, Text } from 'react-native-paper';
+import {
+  ActivityIndicator,
+  Button,
+  Dialog,
+  HelperText,
+  Portal,
+  Text,
+  useTheme,
+} from 'react-native-paper';
 import type { FriendRelationship, Profile } from '@cinepals/types';
 
 import { MaxContentWidth, Spacing } from '@/constants/theme';
@@ -14,11 +22,13 @@ import {
 } from '@/lib/graphql-client';
 
 export default function UserProfileScreen() {
+  const theme = useTheme();
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionPending, setActionPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [removeDialogVisible, setRemoveDialogVisible] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -52,6 +62,14 @@ export default function UserProfileScreen() {
     } finally {
       setActionPending(false);
     }
+  }
+
+  async function confirmRemoveFriend() {
+    if (!profile) {
+      return;
+    }
+    setRemoveDialogVisible(false);
+    await runAction(() => removeFriend(profile.userId), 'NONE');
   }
 
   function renderFriendAction() {
@@ -100,11 +118,13 @@ export default function UserProfileScreen() {
       case 'ACCEPTED':
         return (
           <Button
-            mode="outlined"
+            mode="contained"
             loading={actionPending}
             disabled={actionPending}
-            onPress={() => runAction(() => removeFriend(profile.userId), 'NONE')}>
-            Friends
+            buttonColor={theme.colors.error}
+            textColor={theme.colors.onError}
+            onPress={() => setRemoveDialogVisible(true)}>
+            Remove Friend
           </Button>
         );
       default:
@@ -136,6 +156,29 @@ export default function UserProfileScreen() {
           </>
         )}
       </View>
+
+      <Portal>
+        <Dialog visible={removeDialogVisible} onDismiss={() => setRemoveDialogVisible(false)}>
+          <Dialog.Title>Remove friend?</Dialog.Title>
+          <Dialog.Content>
+            <Text>
+              {profile
+                ? `${profile.displayName} will be removed from your friends.`
+                : 'This person will be removed from your friends.'}
+            </Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setRemoveDialogVisible(false)}>Cancel</Button>
+            <Button
+              mode="contained"
+              buttonColor={theme.colors.error}
+              textColor={theme.colors.onError}
+              onPress={confirmRemoveFriend}>
+              Remove
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </SafeAreaView>
   );
 }
