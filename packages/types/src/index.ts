@@ -18,3 +18,22 @@ export interface FriendEdge {
   createdAt: string;
   profile: Profile | null;
 }
+
+export interface MovieGenre {
+  id: number;
+  name: string;
+}
+
+export interface Movie {
+  id: string;
+  title: string;
+  overview: string | null;
+  posterPath: string | null;
+  backdropPath: string | null;
+  releaseDate: string | null;
+  voteAverage: number | null;
+  voteCount: number | null;
+  runtime: number | null;
+  genres: MovieGenre[] | null;
+  tagline: string | null;
+}

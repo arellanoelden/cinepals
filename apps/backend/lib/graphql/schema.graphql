@@ -28,11 +28,32 @@ type FriendEdge {
   profile: Profile
 }
 
+type MovieGenre {
+  id: Int!
+  name: String!
+}
+
+type Movie {
+  id: ID!
+  title: String!
+  overview: String
+  posterPath: String
+  backdropPath: String
+  releaseDate: String
+  voteAverage: Float
+  voteCount: Int
+  runtime: Int
+  genres: [MovieGenre!]
+  tagline: String
+}
+
 type Query {
   getProfile: Profile
   getProfileById(userId: ID!): Profile
   searchProfiles(query: String!): [Profile!]!
   listFriendEdges: [FriendEdge!]!
+  searchMovies(query: String!): [Movie!]!
+  getMovie(id: ID!): Movie
 }
 
 type Mutation {

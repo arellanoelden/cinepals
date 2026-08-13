@@ -62,6 +62,14 @@ export default function HomeScreen() {
               </Link>
             }
           />
+          <HintRow
+            title="Movies"
+            hint={
+              <Link href="/search">
+                <ThemedText type="linkPrimary">Search Movies</ThemedText>
+              </Link>
+            }
+          />
         </ThemedView>
 
         {Platform.OS === 'web' && <WebBadge />}

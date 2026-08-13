@@ -1,6 +1,6 @@
 import { generateClient, type GraphQLQuery } from 'aws-amplify/api';
 import { fetchAuthSession } from 'aws-amplify/auth';
-import type { FriendEdge, Profile } from '@cinepals/types';
+import type { FriendEdge, Movie, Profile } from '@cinepals/types';
 
 const client = generateClient();
 
@@ -63,6 +63,39 @@ const LIST_FRIEND_EDGES = /* GraphQL */ `
   query ListFriendEdges {
     listFriendEdges {
       ${FRIEND_EDGE_FIELDS}
+    }
+  }
+`;
+
+const MOVIE_FIELDS = `
+  id
+  title
+  overview
+  posterPath
+  backdropPath
+  releaseDate
+  voteAverage
+  voteCount
+  runtime
+  tagline
+  genres {
+    id
+    name
+  }
+`;
+
+const SEARCH_MOVIES = /* GraphQL */ `
+  query SearchMovies($query: String!) {
+    searchMovies(query: $query) {
+      ${MOVIE_FIELDS}
+    }
+  }
+`;
+
+const GET_MOVIE = /* GraphQL */ `
+  query GetMovie($id: ID!) {
+    getMovie(id: $id) {
+      ${MOVIE_FIELDS}
     }
   }
 `;
@@ -179,6 +212,26 @@ export async function removeFriend(userId: string): Promise<boolean> {
     authToken,
   });
   return result.data?.removeFriend ?? false;
+}
+
+export async function searchMovies(query: string): Promise<Movie[]> {
+  const authToken = await getIdToken();
+  const result = await client.graphql<GraphQLQuery<{ searchMovies: Movie[] }>>({
+    query: SEARCH_MOVIES,
+    variables: { query },
+    authToken,
+  });
+  return result.data?.searchMovies ?? [];
+}
+
+export async function getMovie(id: string): Promise<Movie | null> {
+  const authToken = await getIdToken();
+  const result = await client.graphql<GraphQLQuery<{ getMovie: Movie | null }>>({
+    query: GET_MOVIE,
+    variables: { id },
+    authToken,
+  });
+  return result.data?.getMovie ?? null;
 }
 
 export function isProfileAlreadyExistsError(error: unknown): boolean {

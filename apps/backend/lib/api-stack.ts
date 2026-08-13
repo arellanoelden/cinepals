@@ -2,8 +2,16 @@ import * as cdk from 'aws-cdk-lib/core';
 import * as appsync from 'aws-cdk-lib/aws-appsync';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as lambdaNodejs from 'aws-cdk-lib/aws-lambda-nodejs';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
 import { Construct } from 'constructs';
 import * as path from 'path';
+
+// TMDB API key is a low-sensitivity, read-only, rate-limited key (the kind
+// TMDB expects apps to ship client-side) - a plain SSM String parameter kept
+// out of source control is enough; it doesn't need Secrets Manager/SecureString.
+const TMDB_API_KEY_PARAM = '/cinepals/tmdb-api-key';
 
 export interface ApiStackProps extends cdk.StackProps {
   userPool: cognito.IUserPool;
@@ -106,6 +114,32 @@ export class ApiStack extends cdk.Stack {
       fieldName: 'profile',
       runtime: appsync.FunctionRuntime.JS_1_0_0,
       code: resolverCode('friend-edge-profile'),
+    });
+
+    const tmdbFunction = new lambdaNodejs.NodejsFunction(this, 'TmdbFunction', {
+      entry: path.join(__dirname, 'lambda/tmdb-handler.ts'),
+      handler: 'handler',
+      runtime: lambda.Runtime.NODEJS_20_X,
+      timeout: cdk.Duration.seconds(10),
+      environment: {
+        TMDB_API_KEY: ssm.StringParameter.valueForStringParameter(this, TMDB_API_KEY_PARAM),
+      },
+    });
+
+    const tmdbDataSource = api.addLambdaDataSource('TmdbDataSource', tmdbFunction);
+
+    tmdbDataSource.createResolver('SearchMoviesResolver', {
+      typeName: 'Query',
+      fieldName: 'searchMovies',
+      requestMappingTemplate: appsync.MappingTemplate.lambdaRequest(),
+      responseMappingTemplate: appsync.MappingTemplate.lambdaResult(),
+    });
+
+    tmdbDataSource.createResolver('GetMovieResolver', {
+      typeName: 'Query',
+      fieldName: 'getMovie',
+      requestMappingTemplate: appsync.MappingTemplate.lambdaRequest(),
+      responseMappingTemplate: appsync.MappingTemplate.lambdaResult(),
     });
 
     new cdk.CfnOutput(this, 'GraphqlApiUrl', { value: api.graphqlUrl });
