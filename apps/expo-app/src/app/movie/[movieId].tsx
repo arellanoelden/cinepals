@@ -89,6 +89,15 @@ export default function MovieDetailScreen() {
                   </Text>
                 ) : null}
                 {movie.overview ? <Text style={styles.overview}>{movie.overview}</Text> : null}
+
+                <Button
+                  mode="contained"
+                  style={styles.reviewButton}
+                  onPress={() =>
+                    router.push({ pathname: '/create-post/[movieId]', params: { movieId: movie.id } })
+                  }>
+                  Write a Review
+                </Button>
               </View>
             </View>
           )}
@@ -117,4 +126,5 @@ const styles = StyleSheet.create({
   details: { flex: 1, gap: Spacing.two },
   tagline: { fontStyle: 'italic' },
   overview: { lineHeight: 20 },
+  reviewButton: { marginTop: Spacing.two, alignSelf: 'flex-start' },
 });

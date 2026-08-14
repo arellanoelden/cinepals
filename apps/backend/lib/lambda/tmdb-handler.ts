@@ -68,7 +68,16 @@ interface ResolverArgs {
   id?: string;
 }
 
-export async function handler(event: AppSyncResolverEvent<ResolverArgs>) {
+interface ReviewSource {
+  mediaId: string;
+}
+
+async function fetchMovie(id: string) {
+  const movie = await tmdbFetch<TmdbMovie>(`/movie/${id}`);
+  return mapMovie(movie);
+}
+
+export async function handler(event: AppSyncResolverEvent<ResolverArgs, ReviewSource>) {
   switch (event.info.fieldName) {
     case 'searchMovies': {
       const query = event.arguments.query?.trim();
@@ -86,8 +95,12 @@ export async function handler(event: AppSyncResolverEvent<ResolverArgs>) {
       if (!id) {
         return null;
       }
-      const movie = await tmdbFetch<TmdbMovie>(`/movie/${id}`);
-      return mapMovie(movie);
+      return fetchMovie(id);
+    }
+    case 'movie': {
+      // Review.movie field resolver - resolves the reviewed TMDB movie from
+      // the parent Review's mediaId.
+      return fetchMovie(event.source!.mediaId);
     }
     default:
       throw new Error(`Unsupported field: ${event.info.fieldName}`);

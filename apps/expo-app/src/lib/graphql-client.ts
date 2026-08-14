@@ -1,6 +1,7 @@
 import { generateClient, type GraphQLQuery } from 'aws-amplify/api';
 import { fetchAuthSession } from 'aws-amplify/auth';
-import type { FriendEdge, Movie, Profile } from '@cinepals/types';
+import { Platform } from 'react-native';
+import type { FriendEdge, Movie, Profile, Review, UploadTarget } from '@cinepals/types';
 
 const client = generateClient();
 
@@ -96,6 +97,47 @@ const GET_MOVIE = /* GraphQL */ `
   query GetMovie($id: ID!) {
     getMovie(id: $id) {
       ${MOVIE_FIELDS}
+    }
+  }
+`;
+
+const REVIEW_FIELDS = `
+  mediaId
+  userId
+  createdAt
+  rating
+  content
+  media {
+    key
+    url
+  }
+  movie {
+    ${MOVIE_FIELDS}
+  }
+`;
+
+const MY_REVIEWS = /* GraphQL */ `
+  query MyReviews {
+    myReviews {
+      ${REVIEW_FIELDS}
+    }
+  }
+`;
+
+const CREATE_REVIEW = /* GraphQL */ `
+  mutation CreateReview($mediaId: ID!, $rating: Float!, $content: String, $mediaKeys: [String!]) {
+    createReview(mediaId: $mediaId, rating: $rating, content: $content, mediaKeys: $mediaKeys) {
+      ${REVIEW_FIELDS}
+    }
+  }
+`;
+
+const GENERATE_UPLOAD_URL = /* GraphQL */ `
+  mutation GenerateUploadUrl($contentType: String!, $fileExtension: String!) {
+    generateUploadUrl(contentType: $contentType, fileExtension: $fileExtension) {
+      url
+      key
+      fields
     }
   }
 `;
@@ -232,6 +274,78 @@ export async function getMovie(id: string): Promise<Movie | null> {
     authToken,
   });
   return result.data?.getMovie ?? null;
+}
+
+export async function myReviews(): Promise<Review[]> {
+  const authToken = await getIdToken();
+  const result = await client.graphql<GraphQLQuery<{ myReviews: Review[] }>>({
+    query: MY_REVIEWS,
+    authToken,
+  });
+  return result.data?.myReviews ?? [];
+}
+
+export interface CreateReviewInput {
+  mediaId: string;
+  rating: number;
+  content?: string;
+  mediaKeys?: string[];
+}
+
+export async function createReview(input: CreateReviewInput): Promise<Review> {
+  const authToken = await getIdToken();
+  const result = await client.graphql<GraphQLQuery<{ createReview: Review }>>({
+    query: CREATE_REVIEW,
+    variables: input,
+    authToken,
+  });
+  return result.data!.createReview;
+}
+
+export async function generateUploadUrl(contentType: string, fileExtension: string): Promise<UploadTarget> {
+  const authToken = await getIdToken();
+  const result = await client.graphql<
+    GraphQLQuery<{ generateUploadUrl: { url: string; key: string; fields: string } }>
+  >({
+    query: GENERATE_UPLOAD_URL,
+    variables: { contentType, fileExtension },
+    authToken,
+  });
+  const raw = result.data!.generateUploadUrl;
+  return { url: raw.url, key: raw.key, fields: JSON.parse(raw.fields) };
+}
+
+// S3 presigned POST: every field from the presign (policy, signature, key,
+// Content-Type, ...) must be appended before the file, or S3 rejects the
+// upload. On native, React Native's FormData/fetch doesn't serialize a Blob
+// from fetch(uri).blob() into a real multipart file part - it needs the
+// {uri, name, type} descriptor shape so the native networking layer streams
+// the file directly from disk. Sending a Blob there confuses S3's multipart
+// parser into miscounting the file bytes as oversized form fields
+// (MaxPostPreDataLengthExceeded) instead of a file. Web has no such
+// descriptor shape, so it needs an actual Blob.
+export async function uploadMediaAsset(
+  localUri: string,
+  contentType: string,
+  uploadTarget: UploadTarget,
+): Promise<void> {
+  const filename = uploadTarget.key.split('/').pop() ?? 'upload';
+  const formData = new FormData();
+  for (const [key, value] of Object.entries(uploadTarget.fields)) {
+    formData.append(key, value);
+  }
+
+  if (Platform.OS === 'web') {
+    const blob = await (await fetch(localUri)).blob();
+    formData.append('file', blob, filename);
+  } else {
+    formData.append('file', { uri: localUri, name: filename, type: contentType } as unknown as Blob);
+  }
+
+  const response = await fetch(uploadTarget.url, { method: 'POST', body: formData });
+  if (!response.ok) {
+    throw new Error(`Media upload failed with status ${response.status}`);
+  }
 }
 
 export function isProfileAlreadyExistsError(error: unknown): boolean {

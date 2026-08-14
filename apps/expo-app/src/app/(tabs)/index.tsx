@@ -1,7 +1,8 @@
 import * as Device from 'expo-device';
-import { Link } from 'expo-router';
+import { Link, router } from 'expo-router';
 import { Platform, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { FAB, Text } from 'react-native-paper';
 
 import { AnimatedIcon } from '@/components/animated-icon';
 import { HintRow } from '@/components/hint-row';
@@ -74,6 +75,12 @@ export default function HomeScreen() {
 
         {Platform.OS === 'web' && <WebBadge />}
       </SafeAreaView>
+
+      <FAB
+        icon={() => <Text style={styles.fabIcon}>+</Text>}
+        style={styles.fab}
+        onPress={() => router.push('/search?mode=post')}
+      />
     </ThemedView>
   );
 }
@@ -111,5 +118,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.four,
     borderRadius: Spacing.four,
+  },
+  fab: {
+    position: 'absolute',
+    left: Spacing.three,
+    bottom: BottomTabInset + Spacing.three,
+  },
+  fabIcon: {
+    fontSize: 24,
+    lineHeight: 24,
+    color: '#ffffff',
   },
 });

@@ -4,6 +4,7 @@ import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as lambdaNodejs from 'aws-cdk-lib/aws-lambda-nodejs';
+import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 import { Construct } from 'constructs';
 import * as path from 'path';
@@ -17,6 +18,9 @@ export interface ApiStackProps extends cdk.StackProps {
   userPool: cognito.IUserPool;
   profilesTable: dynamodb.ITable;
   friendshipsTable: dynamodb.ITable;
+  reviewsTable: dynamodb.ITable;
+  mediaBucket: s3.IBucket;
+  mediaCdnDomain: string;
 }
 
 function resolverCode(fileName: string) {
@@ -38,8 +42,13 @@ export class ApiStack extends cdk.Stack {
       },
     });
 
+    // JS direct resolvers for Reviews build media URLs from just the stored
+    // S3 key, so they need the CDN domain at runtime.
+    api.addEnvironmentVariable('MEDIA_CDN_DOMAIN', props.mediaCdnDomain);
+
     const profilesDataSource = api.addDynamoDbDataSource('ProfilesDataSource', props.profilesTable);
     const friendshipsDataSource = api.addDynamoDbDataSource('FriendshipsDataSource', props.friendshipsTable);
+    const reviewsDataSource = api.addDynamoDbDataSource('ReviewsDataSource', props.reviewsTable);
 
     // addDynamoDbDataSource only grants the single-item/batch DynamoDB
     // actions - TransactWriteItems (used by send/accept/remove friend) needs
@@ -116,10 +125,24 @@ export class ApiStack extends cdk.Stack {
       code: resolverCode('friend-edge-profile'),
     });
 
+    reviewsDataSource.createResolver('CreateReviewResolver', {
+      typeName: 'Mutation',
+      fieldName: 'createReview',
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+      code: resolverCode('create-review'),
+    });
+
+    reviewsDataSource.createResolver('ListMyReviewsResolver', {
+      typeName: 'Query',
+      fieldName: 'myReviews',
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+      code: resolverCode('list-my-reviews'),
+    });
+
     const tmdbFunction = new lambdaNodejs.NodejsFunction(this, 'TmdbFunction', {
       entry: path.join(__dirname, 'lambda/tmdb-handler.ts'),
       handler: 'handler',
-      runtime: lambda.Runtime.NODEJS_20_X,
+      runtime: lambda.Runtime.NODEJS_22_X,
       timeout: cdk.Duration.seconds(10),
       environment: {
         TMDB_API_KEY: ssm.StringParameter.valueForStringParameter(this, TMDB_API_KEY_PARAM),
@@ -138,6 +161,36 @@ export class ApiStack extends cdk.Stack {
     tmdbDataSource.createResolver('GetMovieResolver', {
       typeName: 'Query',
       fieldName: 'getMovie',
+      requestMappingTemplate: appsync.MappingTemplate.lambdaRequest(),
+      responseMappingTemplate: appsync.MappingTemplate.lambdaResult(),
+    });
+
+    tmdbDataSource.createResolver('ReviewMovieResolver', {
+      typeName: 'Review',
+      fieldName: 'movie',
+      requestMappingTemplate: appsync.MappingTemplate.lambdaRequest(),
+      responseMappingTemplate: appsync.MappingTemplate.lambdaResult(),
+    });
+
+    const mediaUploadFunction = new lambdaNodejs.NodejsFunction(this, 'MediaUploadFunction', {
+      entry: path.join(__dirname, 'lambda/media-upload-handler.ts'),
+      handler: 'handler',
+      runtime: lambda.Runtime.NODEJS_22_X,
+      timeout: cdk.Duration.seconds(10),
+      environment: {
+        MEDIA_BUCKET_NAME: props.mediaBucket.bucketName,
+      },
+    });
+
+    // The presigned POST is signed with this role's credentials, so S3 only
+    // honors the upload once it lands if the role can actually PutObject.
+    props.mediaBucket.grantPut(mediaUploadFunction);
+
+    const mediaUploadDataSource = api.addLambdaDataSource('MediaUploadDataSource', mediaUploadFunction);
+
+    mediaUploadDataSource.createResolver('GenerateUploadUrlResolver', {
+      typeName: 'Mutation',
+      fieldName: 'generateUploadUrl',
       requestMappingTemplate: appsync.MappingTemplate.lambdaRequest(),
       responseMappingTemplate: appsync.MappingTemplate.lambdaResult(),
     });

@@ -5,8 +5,8 @@ Ok now the general steps I want this implemented in are
 
 [x] sign up/login flow
 [x] friends profile view and adding friends
-[] TMDB integration for movie page and search
-[] Create/view my posts
+[x] TMDB integration for movie page and search
+[x] Create/view my posts
 [] View posts from friends, create the feed essentially
 [] View posts on a given profile
 [] Comments on a post and support for images/gifs

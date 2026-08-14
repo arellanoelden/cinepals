@@ -37,3 +37,26 @@ export interface Movie {
   genres: MovieGenre[] | null;
   tagline: string | null;
 }
+
+export interface Media {
+  key: string;
+  url: string;
+}
+
+export interface Review {
+  // ID of the reviewed item - currently always a TMDB movie id, kept
+  // generic so TV shows can be reviewed later too.
+  mediaId: string;
+  userId: string;
+  createdAt: string;
+  rating: number;
+  content: string | null;
+  media: Media[] | null;
+  movie: Movie | null;
+}
+
+export interface UploadTarget {
+  url: string;
+  key: string;
+  fields: Record<string, string>;
+}

@@ -35,6 +35,7 @@ function RootNavigator() {
         <Stack.Screen name="user/[userId]" />
         <Stack.Screen name="search" />
         <Stack.Screen name="movie/[movieId]" />
+        <Stack.Screen name="create-post/[movieId]" />
         <Stack.Screen name="(tabs)" />
       </Stack.Protected>
     </Stack>

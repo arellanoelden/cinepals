@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator, Button, HelperText, Text, TextInput } from 'react-native-paper';
 import type { Movie } from '@cinepals/types';
 
@@ -16,13 +16,18 @@ function releaseYear(movie: Movie): string | null {
   return movie.releaseDate ? movie.releaseDate.slice(0, 4) : null;
 }
 
-function MovieRow({ movie }: { movie: Movie }) {
+function MovieRow({ movie, mode }: { movie: Movie; mode?: string }) {
   const theme = useTheme();
   const year = releaseYear(movie);
+  const handlePress = () => {
+    if (mode === 'post') {
+      router.push({ pathname: '/create-post/[movieId]', params: { movieId: movie.id } });
+    } else {
+      router.push({ pathname: '/movie/[movieId]', params: { movieId: movie.id } });
+    }
+  };
   return (
-    <Pressable
-      onPress={() => router.push({ pathname: '/movie/[movieId]', params: { movieId: movie.id } })}
-      style={[styles.row, { backgroundColor: theme.backgroundElement }]}>
+    <Pressable onPress={handlePress} style={[styles.row, { backgroundColor: theme.backgroundElement }]}>
       {movie.posterPath ? (
         <Image source={{ uri: movie.posterPath }} style={styles.poster} contentFit="cover" />
       ) : (
@@ -44,6 +49,7 @@ function MovieRow({ movie }: { movie: Movie }) {
 
 export default function SearchScreen() {
   const theme = useTheme();
+  const { mode } = useLocalSearchParams<{ mode?: string }>();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Movie[]>([]);
   const [loading, setLoading] = useState(false);
@@ -88,7 +94,7 @@ export default function SearchScreen() {
           </Button>
 
           <Text variant="headlineMedium" style={styles.title}>
-            Search Movies
+            {mode === 'post' ? 'Select a Movie' : 'Search Movies'}
           </Text>
 
           <TextInput
@@ -108,7 +114,7 @@ export default function SearchScreen() {
 
           <View style={styles.results}>
             {results.map((movie) => (
-              <MovieRow key={movie.id} movie={movie} />
+              <MovieRow key={movie.id} movie={movie} mode={mode} />
             ))}
           </View>
         </View>

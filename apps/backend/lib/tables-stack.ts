@@ -5,6 +5,7 @@ import { Construct } from 'constructs';
 export class TablesStack extends cdk.Stack {
   public readonly profilesTable: dynamodb.Table;
   public readonly friendshipsTable: dynamodb.Table;
+  public readonly reviewsTable: dynamodb.Table;
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -36,7 +37,7 @@ export class TablesStack extends cdk.Stack {
     });
 
     // Reviews table: reviews of a media item (movie or TV show)
-    const reviewsTable = new dynamodb.Table(this, 'ReviewsTable', {
+    this.reviewsTable = new dynamodb.Table(this, 'ReviewsTable', {
       tableName: 'Reviews',
       partitionKey: { name: 'mediaId', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'createdAt_userId', type: dynamodb.AttributeType.STRING },
@@ -44,7 +45,7 @@ export class TablesStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
-    reviewsTable.addGlobalSecondaryIndex({
+    this.reviewsTable.addGlobalSecondaryIndex({
       indexName: 'userId-createdAt-index',
       partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'createdAt', type: dynamodb.AttributeType.STRING },
